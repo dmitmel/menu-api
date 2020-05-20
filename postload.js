@@ -13,6 +13,7 @@ ig.module('menu-api')
   .requires(
     'impact.feature.gui.gui',
     'game.feature.gui.screen.title-screen',
+    'game.feature.gui.screen.pause-screen',
     'impact.feature.gui.base.box',
     'game.feature.gui.base.button',
     'impact.feature.bgm.bgm',
@@ -120,51 +121,69 @@ ig.module('menu-api')
       },
     };
 
+    sc.ButtonGui.inject({
+      setButtonTypeGfx(type) {
+        this.buttonType = type;
+        // this.hook.size.y = this.buttonType.height;
+        // this.hook.align.x = this.buttonType.alignX || ig.GUI_ALIGN.X_CENTER;
+        // this.hook.pos.x = this.buttonType.alignXPadding || 0;
+
+        // let bgGuiIndex = this.getChildGuiIndex(this.bgGui);
+        // this.removeChildGuiByIndex(bgGuiIndex);
+        // this.bgGui = new sc.ButtonBgGui(this.hook.size.x, this.buttonType);
+        // this.insertChildGui(this.bgGui, 0);
+        // console.log(bgGuiIndex);
+
+        this.bgGui.ninepatch = this.buttonType.ninepatch;
+        for (let firstKey in this.buttonType.ninepatch.tile.offsets) {
+          this.currentTileOffset = firstKey;
+          break;
+        }
+
+        if (this.buttonType.highlight) {
+          this.highlightGui.highlight = this.buttonType.highlight;
+          this.highlightGui.pattern = this.buttonType.highlight.pattern;
+          this.highlightGui.gfx = this.buttonType.highlight.gfx;
+        }
+      },
+    });
+
+    function createModMenusButton(btnType) {
+      let btn = new sc.ButtonGui('+', 24, true, btnType);
+      btn.onButtonPress = () => {
+        sc.menu.setDirectMode(true, sc.MENU_SUBMENU.MOD_MENUS);
+        sc.model.enterMenu(true);
+      };
+      return btn;
+    }
+
     sc.TitleScreenButtonGui.inject({
       modMenusButton: null,
 
-      init() {
-        this.parent();
+      init(...args) {
+        this.parent(...args);
 
         let optionsBtn = this.namedButtons.setOptions;
-        optionsBtn.bgGui.ninepatch = sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.ninepatch;
-        optionsBtn.bgGui.currentTileOffset =
-          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.ninepatch.tile.offsets.default;
-        optionsBtn.highlightGui.highlight =
-          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.highlight;
-        optionsBtn.highlightGui.pattern =
-          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.highlight.pattern;
-        optionsBtn.highlightGui.gfx =
-          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.highlight.gfx;
+        optionsBtn.setButtonTypeGfx(sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM);
 
-        let modMenusBtn = new sc.ButtonGui(
-          '+',
-          24,
-          true,
+        this.modMenusButton = createModMenusButton(
           sc.BUTTON_TYPE.GROUP_RIGHT_MEDIUM,
         );
-        this.modMenusButton = modMenusBtn;
-
-        modMenusBtn.setAlign(ig.GUI_ALIGN.X_RIGHT, ig.GUI_ALIGN.Y_TOP);
-        modMenusBtn.hook.transitions = {
+        this.modMenusButton.setAlign(ig.GUI_ALIGN.X_RIGHT, ig.GUI_ALIGN.Y_TOP);
+        this.modMenusButton.hook.transitions = {
           DEFAULT: {
             ...optionsBtn.hook.transitions.DEFAULT,
-            state: { offsetX: -modMenusBtn.hook.size.x },
+            state: { offsetX: -this.modMenusButton.hook.size.x },
           },
           HIDDEN: {
             ...optionsBtn.hook.transitions.HIDDEN,
             state: {},
           },
         };
-        modMenusBtn.doStateTransition('HIDDEN', true);
+        this.modMenusButton.doStateTransition('HIDDEN', true);
 
-        modMenusBtn.onButtonPress = () => {
-          sc.menu.setDirectMode(true, sc.MENU_SUBMENU.MOD_MENUS);
-          sc.model.enterMenu(true);
-        };
-
-        optionsBtn.insertChildGui(modMenusBtn, 0);
-        this.buttonGroup.addFocusGui(modMenusBtn, 1, 4);
+        optionsBtn.insertChildGui(this.modMenusButton, 0);
+        this.buttonGroup.addFocusGui(this.modMenusButton, 1, 4);
       },
 
       hide(skipTransition) {
@@ -175,6 +194,39 @@ ig.module('menu-api')
       show() {
         this.parent();
         this.modMenusButton.doStateTransition('DEFAULT', false);
+      },
+    });
+
+    sc.PauseScreenGui.inject({
+      modMenusButton: null,
+
+      init(...args) {
+        this.parent(...args);
+
+        this.optionsButton.setButtonTypeGfx(sc.BUTTON_TYPE.GROUP_RIGHT_MEDIUM);
+
+        this.modMenusButton = createModMenusButton(
+          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM,
+        );
+        this.modMenusButton.setAlign(ig.GUI_ALIGN.X_LEFT, ig.GUI_ALIGN.Y_TOP);
+        this.optionsButton.insertChildGui(this.modMenusButton, 0);
+      },
+
+      updateButtons(...args) {
+        this.optionsButton.removeChildGui(this.modMenusButton);
+
+        this.parent(...args);
+
+        this.optionsButton.insertChildGui(this.modMenusButton, 0);
+        this.modMenusButton.setPos(-this.modMenusButton.hook.size.x, 0);
+        // TODO: copy the vertical focus index from `this.optionsButton`
+        this.buttonGroup.addFocusGui(
+          this.modMenusButton,
+          this.buttonGroup.largestIndex.x + 1,
+          0,
+        );
+
+        // TODO: is refocusing possible here?
       },
     });
 

@@ -17,9 +17,8 @@ ig.module('menu-api')
     'game.feature.gui.base.button',
     'impact.feature.bgm.bgm',
     'impact.feature.interact.interact',
-    'impact.feature.interact.button-interact',
-    'game.feature.interact.button-group',
     'game.feature.menu.gui.list-boxes',
+    'game.feature.menu.menu-model',
   )
   .defines(() => {
     sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM = {
@@ -127,8 +126,6 @@ ig.module('menu-api')
       init() {
         this.parent();
 
-        this.modMenusGui = new sc.menuAPI.ModsGui(this);
-
         let optionsBtn = this.namedButtons.setOptions;
         optionsBtn.bgGui.ninepatch = sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.ninepatch;
         optionsBtn.bgGui.currentTileOffset =
@@ -162,20 +159,12 @@ ig.module('menu-api')
         modMenusBtn.doStateTransition('HIDDEN', true);
 
         modMenusBtn.onButtonPress = () => {
-          ig.bgm.pause('SLOW');
-          ig.interact.removeEntry(this.buttonInteract);
-          this.background.doStateTransition('DEFAULT');
-
-          this.modMenusGui.takeControl();
+          sc.menu.setDirectMode(true, sc.MENU_SUBMENU.MOD_MENUS);
+          sc.model.enterMenu(true);
         };
 
         optionsBtn.insertChildGui(modMenusBtn, 0);
         this.buttonGroup.addFocusGui(modMenusBtn, 1, 4);
-      },
-
-      postInit(...args) {
-        this.parent(...args);
-        this.addChildGui(this.modMenusGui);
       },
 
       hide(skipTransition) {
@@ -189,79 +178,102 @@ ig.module('menu-api')
       },
     });
 
-    sc.menuAPI.ModsGui = ig.GuiElementBase.extend({
-      transitions: {
-        DEFAULT: {
-          state: {},
-          time: 0.5,
-          timeFunction: KEY_SPLINES.EASE,
-        },
-        HIDDEN: {
-          state: {},
-          time: 0.5,
-          timeFunction: KEY_SPLINES.EASE,
-        },
-      },
+    sc.menuAPI.ModMenusMenu = sc.BaseMenu.extend({
+      list: null,
+      background: null,
 
-      init(titleButtons) {
+      init() {
         this.parent();
         this.setSize(ig.system.width, ig.system.height);
-        this.hook.transitions.HIDDEN.state.offsetY = ig.system.height;
-        this.doStateTransition('HIDDEN', true);
+        this.doStateTransition('DEFAULT');
 
-        this.titleButtons = titleButtons;
-
-        this.interact = new ig.ButtonInteractEntry();
-        this.group = new sc.ButtonGroup();
-        this.interact.pushButtonGroup(this.group);
-
-        let back = new sc.ButtonGui('Back');
-        back.setAlign(ig.GUI_ALIGN.X_LEFT, ig.GUI_ALIGN.Y_TOP);
-        back.setPos(12, 12);
-        back.onButtonPress = () => {
-          ig.interact.removeEntry(this.interact);
-          this.doStateTransition('HIDDEN');
-
-          this.titleButtons.background.doStateTransition('HIDDEN');
-          ig.interact.addEntry(this.titleButtons.buttonInteract);
-          ig.bgm.resume('SLOW');
-        };
-        this.group.addFocusGui(back, 0, 0);
-        this.addChildGui(back);
-
-        this.buttonWidth = Math.floor((ig.system.width - 12) / 2);
-        this.listBox = new sc.ButtonListBox(
-          0,
-          0,
-          20,
-          2,
-          0,
-          this.buttonWidth,
-          this.interact,
+        this.list = new sc.ButtonListBox(
+          0, // paddingTop
+          0, // paddingBetween
+          20, // pageSize
+          sc.LIST_COLUMNS.TWO,
+          0, // columnPadding
         );
-        let border = 4;
-        this.listBox.setPos(border, 36 + border);
-        this.listBox.setSize(
-          ig.system.width - border * 2,
-          ig.system.height - 36 - (border * 2 + 8),
-        );
-        this.listBox.setButtonGroup(this.group);
-        this.addChildGui(this.listBox);
+        this.list.setAlign(ig.GUI_ALIGN.X_CENTER, ig.GUI_ALIGN.Y_CENTER);
+        this.list.setSize(436, 258);
+        this.list.buttonWidth = Math.floor((this.list.hook.size.x - 5) / 2);
 
         for (let i = 0; i < sc.menuAPI.buttons.length; i++) {
-          let bt = new sc.ButtonGui(
-            sc.menuAPI.buttons[i].text,
-            this.buttonWidth,
+          let config = sc.menuAPI.buttons[i];
+          let btn = new sc.ButtonGui(config.text, this.list.buttonWidth);
+          btn.onButtonPress = config.runnable;
+          this.list.addButton(btn, true);
+          this.list.buttonGroup.insertFocusGui(
+            btn,
+            i % 2,
+            1 + Math.floor(i / 2),
           );
-          bt.onButtonPress = sc.menuAPI.buttons[i].runnable;
-          this.listBox.addButton(bt, true);
-          this.group.insertFocusGui(bt, i % 2, 1 + Math.floor(i / 2));
         }
+
+        this.background = new sc.MenuScanLines();
+        this.background.setSize(this.list.hook.size.x, this.list.hook.size.y);
+        this.background.setAlign(ig.GUI_ALIGN.X_CENTER, ig.GUI_ALIGN.Y_CENTER);
+        this.background.hook.transitions = {
+          DEFAULT: { state: {}, time: 0.2, timeFunction: KEY_SPLINES.LINEAR },
+          HIDDEN: {
+            state: { alpha: 0, offsetX: this.background.hook.size.x / 2 },
+            time: 0.2,
+            timeFunction: KEY_SPLINES.LINEAR,
+          },
+        };
+        this.background.doStateTransition('HIDDEN', true);
+
+        this.background.addChildGui(this.list);
+        this.addChildGui(this.background);
       },
 
-      takeControl() {
-        this.doStateTransition('DEFAULT');
-        ig.interact.addEntry(this.interact);
+      addObservers() {
+        sc.Model.addObserver(sc.menu, this);
       },
+
+      removeObservers() {
+        sc.Model.removeObserver(sc.menu, this);
+      },
+
+      showMenu() {
+        this.addObservers();
+        sc.menu.pushBackCallback(this.onBackButtonPress.bind(this));
+        sc.menu.moveLeaSprite(0, 0, sc.MENU_LEA_STATE.HIDDEN);
+        this.list.activate();
+        ig.interact.setBlockDelay(0.2);
+        this.onAddHotkeys();
+
+        this.background.doStateTransition('DEFAULT');
+        ig.bgm.pause('MEDIUM');
+      },
+
+      hideMenu() {
+        this.removeObservers();
+        sc.menu.moveLeaSprite(0, 0, sc.MENU_LEA_STATE.LARGE);
+        this.exitMenu();
+      },
+
+      exitMenu() {
+        this.list.deactivate();
+        this.background.doStateTransition('HIDDEN');
+        ig.bgm.resume('MEDIUM');
+      },
+
+      onAddHotkeys() {
+        sc.menu.commitHotkeys();
+      },
+
+      onBackButtonPress() {
+        sc.menu.popBackCallback();
+        sc.menu.popMenu();
+      },
+
+      modelChanged() {},
     });
+
+    sc.MENU_SUBMENU.MOD_MENUS = Object.keys(sc.MENU_SUBMENU).length;
+    sc.SUB_MENU_INFO[sc.MENU_SUBMENU.MOD_MENUS] = {
+      Clazz: sc.menuAPI.ModMenusMenu,
+      name: 'modMenus',
+    };
   });

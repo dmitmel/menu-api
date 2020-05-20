@@ -4,5 +4,6 @@
   "homepage": "https://github.com/dmitmel/menu-api",
   "version": "0.1.1",
   "module": true,
-  "postload": "postload.js"
+  "postload": "postload.js",
+  "main": "poststart.js"
 }

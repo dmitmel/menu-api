@@ -5,22 +5,6 @@
 /// You should have received a copy of the CC0 Public Domain Dedication along with this software. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 ///
 
-window.mainMenuAPI = {
-  TitleOverlayGui: null,
-  titleButtonGui: null,
-  ModsGui: null,
-  modsGui: null,
-  // Makes the title screen lose control for your custom UI.
-  titleLoseControl() {
-    ig.bgm.pause('SLOW');
-    ig.interact.removeEntry(this.titleButtonGui.buttonInteract);
-    this.titleButtonGui.background.doStateTransition('DEFAULT');
-  },
-  // Gives the title screen control again.
-  titleTakeControl() {
-    this.titleButtonGui.background.doStateTransition('HIDDEN');
-    ig.interact.addEntry(this.titleButtonGui.buttonInteract);
-    ig.bgm.resume('SLOW');
-  },
+sc.menuAPI = {
   buttons: [],
 };

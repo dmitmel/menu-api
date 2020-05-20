@@ -13,6 +13,7 @@ ig.module('menu-api')
   .requires(
     'impact.feature.gui.gui',
     'game.feature.gui.screen.title-screen',
+    'impact.feature.gui.base.box',
     'game.feature.gui.base.button',
     'impact.feature.bgm.bgm',
     'impact.feature.interact.interact',
@@ -21,6 +22,105 @@ ig.module('menu-api')
     'game.feature.menu.gui.list-boxes',
   )
   .defines(() => {
+    sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM = {
+      height: 24,
+      ninepatch: new ig.NinePatch('mods/menu-api/buttons.png', {
+        width: 8,
+        height: 0,
+        left: 8,
+        top: 24,
+        right: 8,
+        bottom: 0,
+        offsets: {
+          default: { x: 0, y: 0 },
+          focus: { x: 0, y: 24 },
+          pressed: { x: 0, y: 24 },
+        },
+      }),
+      highlight: {
+        startX: 0,
+        endX: 24,
+        leftWidth: 9,
+        rightWidth: 4,
+        offsetY: 48,
+        gfx: new ig.Image('mods/menu-api/buttons.png'),
+        pattern: new ig.ImagePattern(
+          'mods/menu-api/buttons.png',
+          9,
+          48,
+          11,
+          24,
+          ig.ImagePattern.OPT.REPEAT_X,
+        ),
+      },
+    };
+
+    sc.BUTTON_TYPE.GROUP_MEDIUM = {
+      height: 24,
+      ninepatch: new ig.NinePatch('mods/menu-api/buttons.png', {
+        width: 8,
+        height: 0,
+        left: 4,
+        top: 24,
+        right: 4,
+        bottom: 0,
+        offsets: {
+          default: { x: 24, y: 0 },
+          focus: { x: 24, y: 24 },
+          pressed: { x: 24, y: 24 },
+        },
+      }),
+      highlight: {
+        startX: 24,
+        endX: 40,
+        leftWidth: 4,
+        rightWidth: 4,
+        offsetY: 48,
+        gfx: new ig.Image('mods/menu-api/buttons.png'),
+        pattern: new ig.ImagePattern(
+          'mods/menu-api/buttons.png',
+          28,
+          48,
+          8,
+          24,
+          ig.ImagePattern.OPT.REPEAT_X,
+        ),
+      },
+    };
+
+    sc.BUTTON_TYPE.GROUP_RIGHT_MEDIUM = {
+      height: 24,
+      ninepatch: new ig.NinePatch('mods/menu-api/buttons.png', {
+        width: 8,
+        height: 0,
+        left: 8,
+        top: 24,
+        right: 8,
+        bottom: 0,
+        offsets: {
+          default: { x: 40, y: 0 },
+          focus: { x: 40, y: 24 },
+          pressed: { x: 40, y: 24 },
+        },
+      }),
+      highlight: {
+        startX: 40,
+        endX: 64,
+        leftWidth: 4,
+        rightWidth: 9,
+        offsetY: 48,
+        gfx: new ig.Image('mods/menu-api/buttons.png'),
+        pattern: new ig.ImagePattern(
+          'mods/menu-api/buttons.png',
+          43,
+          48,
+          13,
+          24,
+          ig.ImagePattern.OPT.REPEAT_X,
+        ),
+      },
+    };
+
     sc.TitleScreenButtonGui.inject({
       modMenusButton: null,
 
@@ -29,29 +129,39 @@ ig.module('menu-api')
 
         this.modMenusGui = new sc.menuAPI.ModsGui(this);
 
-        this.modMenusButton = new sc.ButtonGui('+', 32);
-        this.modMenusButton.setAlign(
-          ig.GUI_ALIGN.X_LEFT,
-          ig.GUI_ALIGN.Y_BOTTOM,
+        let optionsBtn = this.namedButtons.setOptions;
+        optionsBtn.bgGui.ninepatch = sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.ninepatch;
+        optionsBtn.bgGui.currentTileOffset =
+          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.ninepatch.tile.offsets.default;
+        optionsBtn.highlightGui.highlight =
+          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.highlight;
+        optionsBtn.highlightGui.pattern =
+          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.highlight.pattern;
+        optionsBtn.highlightGui.gfx =
+          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM.highlight.gfx;
+
+        let modMenusBtn = new sc.ButtonGui(
+          '+',
+          24,
+          true,
+          sc.BUTTON_TYPE.GROUP_RIGHT_MEDIUM,
         );
-        this.modMenusButton.setPos(160, 40);
-        this.modMenusButton.hook.transitions = {
+        this.modMenusButton = modMenusBtn;
+
+        modMenusBtn.setAlign(ig.GUI_ALIGN.X_RIGHT, ig.GUI_ALIGN.Y_TOP);
+        modMenusBtn.hook.transitions = {
           DEFAULT: {
-            state: {},
-            time: 0.4,
-            timeFunction: KEY_SPLINES.LINEAR,
+            ...optionsBtn.hook.transitions.DEFAULT,
+            state: { offsetX: -modMenusBtn.hook.size.x },
           },
           HIDDEN: {
-            state: {
-              offsetX: -192,
-              alpha: 0,
-            },
-            time: 0.4,
-            timeFunction: KEY_SPLINES.LINEAR,
+            ...optionsBtn.hook.transitions.HIDDEN,
+            state: {},
           },
         };
+        modMenusBtn.doStateTransition('HIDDEN', true);
 
-        this.modMenusButton.onButtonPress = () => {
+        modMenusBtn.onButtonPress = () => {
           ig.bgm.pause('SLOW');
           ig.interact.removeEntry(this.buttonInteract);
           this.background.doStateTransition('DEFAULT');
@@ -59,9 +169,8 @@ ig.module('menu-api')
           this.modMenusGui.takeControl();
         };
 
-        this.modMenusButton.doStateTransition('HIDDEN', true);
-        this.insertChildGui(this.modMenusButton, 0);
-        this.buttonGroup.addFocusGui(this.modMenusButton, 1, 4);
+        optionsBtn.insertChildGui(modMenusBtn, 0);
+        this.buttonGroup.addFocusGui(modMenusBtn, 1, 4);
       },
 
       postInit(...args) {
@@ -69,9 +178,9 @@ ig.module('menu-api')
         this.addChildGui(this.modMenusGui);
       },
 
-      hide(a) {
-        this.parent(a);
-        this.modMenusButton.doStateTransition('HIDDEN', a);
+      hide(skipTransition) {
+        this.parent(skipTransition);
+        this.modMenusButton.doStateTransition('HIDDEN', skipTransition);
       },
 
       show() {

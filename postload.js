@@ -6,11 +6,34 @@
 ///
 
 sc.menuAPI = {
+  quickAccessButtons: [],
   buttons: [],
 };
 
+ig.module('menu-api.icons')
+  .requires('game.feature.font.font-system')
+  .defines(() => {
+    const ICON_FONT = new ig.Font(
+      'mods/menu-api/icons.png',
+      16,
+      ig.MultiFont.ICON_START,
+    );
+
+    const ICON_LIST = ['menu-api-mod-menus'];
+
+    let ourFontIndex = sc.fontsystem.font.iconSets.length;
+    sc.fontsystem.font.pushIconSet(ICON_FONT);
+
+    let iconMapping = ICON_LIST.reduce((mapping, iconName, iconIndex) => {
+      mapping[iconName] = [ourFontIndex, iconIndex];
+      return mapping;
+    }, {});
+    sc.fontsystem.font.setMapping(iconMapping);
+  });
+
 ig.module('menu-api')
   .requires(
+    'menu-api.icons',
     'impact.feature.gui.gui',
     'game.feature.gui.screen.title-screen',
     'game.feature.gui.screen.pause-screen',
@@ -124,15 +147,6 @@ ig.module('menu-api')
     sc.ButtonGui.inject({
       setButtonTypeGfx(type) {
         this.buttonType = type;
-        // this.hook.size.y = this.buttonType.height;
-        // this.hook.align.x = this.buttonType.alignX || ig.GUI_ALIGN.X_CENTER;
-        // this.hook.pos.x = this.buttonType.alignXPadding || 0;
-
-        // let bgGuiIndex = this.getChildGuiIndex(this.bgGui);
-        // this.removeChildGuiByIndex(bgGuiIndex);
-        // this.bgGui = new sc.ButtonBgGui(this.hook.size.x, this.buttonType);
-        // this.insertChildGui(this.bgGui, 0);
-        // console.log(bgGuiIndex);
 
         this.bgGui.ninepatch = this.buttonType.ninepatch;
         for (let firstKey in this.buttonType.ninepatch.tile.offsets) {
@@ -148,52 +162,113 @@ ig.module('menu-api')
       },
     });
 
-    function createModMenusButton(btnType) {
-      let btn = new sc.ButtonGui('+', 24, true, btnType);
-      btn.onButtonPress = () => {
-        sc.menu.setDirectMode(true, sc.MENU_SUBMENU.MOD_MENUS);
-        sc.model.enterMenu(true);
-      };
-      return btn;
+    sc.menuAPI.QuickAccessButtonsGui = ig.GuiElementBase.extend({
+      buttons: [],
+
+      init() {
+        this.parent();
+      },
+
+      addButton(config, totalCount) {
+        let btnType = sc.BUTTON_TYPE.DEFAULT;
+        let index = this.buttons.length;
+        if (totalCount != null && totalCount > 1) {
+          if (index === 0) {
+            btnType = sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM;
+          } else if (index === totalCount - 1) {
+            btnType = sc.BUTTON_TYPE.GROUP_RIGHT_MEDIUM;
+          } else {
+            btnType = sc.BUTTON_TYPE.GROUP_MEDIUM;
+          }
+        }
+
+        let btn = new sc.ButtonGui(config.label, config.width, true, btnType);
+        if (config.width == null) {
+          let width = Math.max(
+            btn.textChild.hook.size.x +
+              2 * this.constructor.BUTTON_PADDING_DEFAULT,
+            btn.hook.size.y,
+          );
+          width = Math.ceil(width / 2) * 2;
+          btn.setWidth(width);
+        }
+        btn.onButtonPress = config.onPress;
+        if (typeof config.onCreate === 'function') config.onCreate.call(btn);
+
+        btn.hook.pos.x = this.hook.size.x;
+        this.hook.size.x += btn.hook.size.x;
+        this.addChildGui(btn);
+        this.buttons.push(btn);
+
+        return btn;
+      },
+    });
+    sc.menuAPI.QuickAccessButtonsGui.BUTTON_PADDING_DEFAULT = 8;
+
+    function openModMenus() {
+      sc.menu.setDirectMode(true, sc.MENU_SUBMENU.MOD_MENUS);
+      sc.model.enterMenu(true);
     }
 
     sc.TitleScreenButtonGui.inject({
-      modMenusButton: null,
+      modQuickAccessButtons: null,
 
       init(...args) {
         this.parent(...args);
 
-        let optionsBtn = this.namedButtons.setOptions;
-        optionsBtn.setButtonTypeGfx(sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM);
-
-        this.modMenusButton = createModMenusButton(
-          sc.BUTTON_TYPE.GROUP_RIGHT_MEDIUM,
+        this.modQuickAccessButtons = new sc.menuAPI.QuickAccessButtonsGui();
+        this.modQuickAccessButtons.setAlign(
+          ig.GUI_ALIGN.X_LEFT,
+          ig.GUI_ALIGN.Y_TOP,
         );
-        this.modMenusButton.setAlign(ig.GUI_ALIGN.X_RIGHT, ig.GUI_ALIGN.Y_TOP);
-        this.modMenusButton.hook.transitions = {
-          DEFAULT: {
-            ...optionsBtn.hook.transitions.DEFAULT,
-            state: { offsetX: -this.modMenusButton.hook.size.x },
+        this.modQuickAccessButtons.setPos(
+          this.namedButtons.setOptions.hook.pos.x,
+          this.changelogButton.hook.pos.y,
+        );
+        this.addChildGui(this.modQuickAccessButtons);
+
+        let quickAccessBtnConfigs = [
+          {
+            id: 'modMenus',
+            label: '\\i[menu-api-mod-menus]',
+            onPress: openModMenus,
           },
-          HIDDEN: {
-            ...optionsBtn.hook.transitions.HIDDEN,
-            state: {},
-          },
-        };
-        this.modMenusButton.doStateTransition('HIDDEN', true);
+          ...sc.menuAPI.quickAccessButtons,
+        ];
 
-        optionsBtn.insertChildGui(this.modMenusButton, 0);
-        this.buttonGroup.addFocusGui(this.modMenusButton, 1, 4);
-      },
+        let btnGroup = this.buttonGroup;
+        for (let i = 0, len = quickAccessBtnConfigs.length; i < len; i++) {
+          let btnConfig = quickAccessBtnConfigs[i];
+          let btn = this.modQuickAccessButtons.addButton(btnConfig, len);
+          btn.hook.transitions = {
+            DEFAULT: {
+              ...this.changelogButton.hook.transitions.DEFAULT,
+              state: {},
+            },
+            HIDDEN: {
+              ...this.changelogButton.hook.transitions.HIDDEN,
+              state: {
+                offsetY: -(
+                  this.modQuickAccessButtons.hook.pos.y +
+                  btn.hook.pos.y +
+                  btn.hook.size.y
+                ),
+              },
+            },
+          };
+          btn.doStateTransition('HIDDEN', true);
+          btnGroup.addFocusGui(btn, i, btnGroup.largestIndex.y + 1);
+        }
 
-      hide(skipTransition) {
-        this.parent(skipTransition);
-        this.modMenusButton.doStateTransition('HIDDEN', skipTransition);
-      },
-
-      show() {
-        this.parent();
-        this.modMenusButton.doStateTransition('DEFAULT', false);
+        // Let's piggyback on the default implementation here instead of rolling
+        // the more or less same loops in this mod. Unfortunately `this.buttons`
+        // is iterated backwards in the game code, so I have to push our buttons
+        // in the reverse order as well.
+        let quickAccessBtnGuis = this.modQuickAccessButtons.buttons;
+        for (let i = 0, len = quickAccessBtnGuis.length; i < len; i++) {
+          let btn = quickAccessBtnGuis[len - i - 1];
+          this.buttons.push(btn);
+        }
       },
     });
 
@@ -205,9 +280,13 @@ ig.module('menu-api')
 
         this.optionsButton.setButtonTypeGfx(sc.BUTTON_TYPE.GROUP_RIGHT_MEDIUM);
 
-        this.modMenusButton = createModMenusButton(
+        this.modMenusButton = new sc.ButtonGui(
+          '+',
+          24,
+          true,
           sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM,
         );
+        this.modMenusButton.onButtonPress = openModMenus;
         this.modMenusButton.setAlign(ig.GUI_ALIGN.X_LEFT, ig.GUI_ALIGN.Y_TOP);
         this.optionsButton.insertChildGui(this.modMenusButton, 0);
       },

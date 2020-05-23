@@ -144,29 +144,32 @@ ig.module('menu-api')
       },
     };
 
-    sc.ButtonGui.inject({
-      setButtonTypeGfx(type) {
-        this.buttonType = type;
-
-        this.bgGui.ninepatch = this.buttonType.ninepatch;
-        for (let firstKey in this.buttonType.ninepatch.tile.offsets) {
-          this.currentTileOffset = firstKey;
-          break;
-        }
-
-        if (this.buttonType.highlight) {
-          this.highlightGui.highlight = this.buttonType.highlight;
-          this.highlightGui.pattern = this.buttonType.highlight.pattern;
-          this.highlightGui.gfx = this.buttonType.highlight.gfx;
-        }
-      },
-    });
-
     sc.menuAPI.QuickAccessButtonsGui = ig.GuiElementBase.extend({
       buttons: [],
 
       init() {
         this.parent();
+        this.updateButtons();
+      },
+
+      updateButtons() {
+        for (let i = 0, len = this.buttons.length; i < len; i++) {
+          this.removeChildGui(this.buttons[i]);
+        }
+        this.buttons.length = 0;
+
+        let configs = [
+          {
+            id: 'modMenus',
+            label: '\\i[menu-api-mod-menus]',
+            onPress: openModMenus,
+          },
+          ...sc.menuAPI.quickAccessButtons,
+        ];
+
+        for (let i = 0, len = configs.length; i < len; i++) {
+          this.addButton(configs[i], len);
+        }
       },
 
       addButton(config, totalCount) {
@@ -227,26 +230,21 @@ ig.module('menu-api')
         );
         this.addChildGui(this.modQuickAccessButtons);
 
-        let quickAccessBtnConfigs = [
-          {
-            id: 'modMenus',
-            label: '\\i[menu-api-mod-menus]',
-            onPress: openModMenus,
-          },
-          ...sc.menuAPI.quickAccessButtons,
-        ];
+        let quickAccessBtnGuis = this.modQuickAccessButtons.buttons;
 
         let btnGroup = this.buttonGroup;
-        for (let i = 0, len = quickAccessBtnConfigs.length; i < len; i++) {
-          let btnConfig = quickAccessBtnConfigs[i];
-          let btn = this.modQuickAccessButtons.addButton(btnConfig, len);
+        let defaultBtnTransitions = this.changelogButton.hook.transitions;
+        for (let i = 0, len = quickAccessBtnGuis.length; i < len; i++) {
+          let btn = quickAccessBtnGuis[i];
           btn.hook.transitions = {
             DEFAULT: {
-              ...this.changelogButton.hook.transitions.DEFAULT,
               state: {},
+              time: defaultBtnTransitions.DEFAULT.time,
+              timeFunction: defaultBtnTransitions.DEFAULT.timeFunction,
             },
             HIDDEN: {
-              ...this.changelogButton.hook.transitions.HIDDEN,
+              time: defaultBtnTransitions.HIDDEN.time,
+              timeFunction: defaultBtnTransitions.HIDDEN.timeFunction,
               state: {
                 offsetY: -(
                   this.modQuickAccessButtons.hook.pos.y +
@@ -257,55 +255,46 @@ ig.module('menu-api')
             },
           };
           btn.doStateTransition('HIDDEN', true);
-          btnGroup.addFocusGui(btn, i, btnGroup.largestIndex.y + 1);
-        }
+          btnGroup.addFocusGui(btn, btnGroup.largestIndex.x + 1, 0);
 
-        // Let's piggyback on the default implementation here instead of rolling
-        // the more or less same loops in this mod. Unfortunately `this.buttons`
-        // is iterated backwards in the game code, so I have to push our buttons
-        // in the reverse order as well.
-        let quickAccessBtnGuis = this.modQuickAccessButtons.buttons;
-        for (let i = 0, len = quickAccessBtnGuis.length; i < len; i++) {
-          let btn = quickAccessBtnGuis[len - i - 1];
-          this.buttons.push(btn);
+          // Let's piggyback on the default implementation here instead of
+          // rolling the more or less same loops in this mod. Unfortunately
+          // `this.buttons` is iterated backwards in the game code, so I have to
+          // push our buttons in the reverse order as well.
+          this.buttons.push(quickAccessBtnGuis[len - i - 1]);
         }
       },
     });
 
     sc.PauseScreenGui.inject({
-      modMenusButton: null,
+      modQuickAccessButtons: null,
 
       init(...args) {
         this.parent(...args);
 
-        this.optionsButton.setButtonTypeGfx(sc.BUTTON_TYPE.GROUP_RIGHT_MEDIUM);
-
-        this.modMenusButton = new sc.ButtonGui(
-          '+',
-          24,
-          true,
-          sc.BUTTON_TYPE.GROUP_LEFT_MEDIUM,
+        this.modQuickAccessButtons = new sc.menuAPI.QuickAccessButtonsGui();
+        this.modQuickAccessButtons.setAlign(
+          ig.GUI_ALIGN.X_LEFT,
+          ig.GUI_ALIGN.Y_TOP,
         );
-        this.modMenusButton.onButtonPress = openModMenus;
-        this.modMenusButton.setAlign(ig.GUI_ALIGN.X_LEFT, ig.GUI_ALIGN.Y_TOP);
-        this.optionsButton.insertChildGui(this.modMenusButton, 0);
+        this.modQuickAccessButtons.setPos(
+          this.toTitleButton.hook.pos.x,
+          this.toTitleButton.hook.pos.y,
+        );
+        this.addChildGui(this.modQuickAccessButtons);
       },
 
       updateButtons(...args) {
-        this.optionsButton.removeChildGui(this.modMenusButton);
-
         this.parent(...args);
 
-        this.optionsButton.insertChildGui(this.modMenusButton, 0);
-        this.modMenusButton.setPos(-this.modMenusButton.hook.size.x, 0);
-        // TODO: copy the vertical focus index from `this.optionsButton`
-        this.buttonGroup.addFocusGui(
-          this.modMenusButton,
-          this.buttonGroup.largestIndex.x + 1,
-          0,
-        );
+        let btnGroup = this.buttonGroup;
+        let quickAccessBtnGuis = this.modQuickAccessButtons.buttons;
+        for (let i = 0, len = quickAccessBtnGuis.length; i < len; i++) {
+          let btn = quickAccessBtnGuis[i];
+          btnGroup.addFocusGui(btn, btnGroup.largestIndex.x + 1, 0);
+        }
 
-        // TODO: is refocusing possible here?
+        // TODO: is proper refocusing possible here?
       },
     });
 

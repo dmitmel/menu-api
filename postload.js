@@ -7,28 +7,19 @@
 
 sc.menuAPI = {
   quickAccessButtons: [],
-  buttons: [],
+  menus: [],
 };
 
 ig.module('menu-api.icons')
   .requires('game.feature.font.font-system')
   .defines(() => {
-    const ICON_FONT = new ig.Font(
-      'mods/menu-api/icons.png',
-      16,
-      ig.MultiFont.ICON_START,
-    );
-
-    const ICON_LIST = ['menu-api-mod-menus'];
-
     let ourFontIndex = sc.fontsystem.font.iconSets.length;
-    sc.fontsystem.font.pushIconSet(ICON_FONT);
-
-    let iconMapping = ICON_LIST.reduce((mapping, iconName, iconIndex) => {
-      mapping[iconName] = [ourFontIndex, iconIndex];
-      return mapping;
-    }, {});
-    sc.fontsystem.font.setMapping(iconMapping);
+    sc.fontsystem.font.pushIconSet(
+      new ig.Font('mods/menu-api/icons.png', 16, ig.MultiFont.ICON_START),
+    );
+    sc.fontsystem.font.setMapping({
+      'menu-api-mod-menus': [ourFontIndex, 0],
+    });
   });
 
 ig.module('menu-api')
@@ -158,14 +149,15 @@ ig.module('menu-api')
         }
         this.buttons.length = 0;
 
-        let configs = [
-          {
+        let configs = [];
+        if (sc.menuAPI.menus.length > 0) {
+          configs.push({
             id: 'modMenus',
             label: '\\i[menu-api-mod-menus]',
             onPress: openModMenus,
-          },
-          ...sc.menuAPI.quickAccessButtons,
-        ];
+          });
+        }
+        configs.push(...sc.menuAPI.quickAccessButtons);
 
         for (let i = 0, len = configs.length; i < len; i++) {
           this.addButton(configs[i], len);
@@ -318,10 +310,12 @@ ig.module('menu-api')
         this.list.setSize(436, 258);
         this.list.buttonWidth = Math.floor((this.list.hook.size.x - 5) / 2);
 
-        for (let i = 0; i < sc.menuAPI.buttons.length; i++) {
-          let config = sc.menuAPI.buttons[i];
-          let btn = new sc.ButtonGui(config.text, this.list.buttonWidth);
-          btn.onButtonPress = config.runnable;
+        for (let i = 0; i < sc.menuAPI.menus.length; i++) {
+          let config = sc.menuAPI.menus[i];
+          let btn = new sc.ButtonGui(config.label, this.list.buttonWidth);
+          btn.onButtonPress = config.onPress;
+          if (typeof config.onCreate === 'function') config.onCreate.call(btn);
+
           this.list.addButton(btn, true);
           this.list.buttonGroup.insertFocusGui(
             btn,
@@ -360,7 +354,9 @@ ig.module('menu-api')
         sc.menu.pushBackCallback(this.onBackButtonPress.bind(this));
         sc.menu.moveLeaSprite(0, 0, sc.MENU_LEA_STATE.HIDDEN);
         this.list.activate();
-        ig.interact.setBlockDelay(0.2);
+        ig.interact.setBlockDelay(
+          this.background.hook.transitions.DEFAULT.time,
+        );
         this.onAddHotkeys();
 
         this.background.doStateTransition('DEFAULT');
